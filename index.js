@@ -1,51 +1,86 @@
-import express from 'express';
-import Stripe  from 'stripe';
+// index.js
+// -----------------------------------------------------------------------------
+// Avviare con: node index.js
+// Richiede: "type": "module" nel package.json
+// -----------------------------------------------------------------------------
 
+import express from 'express';
+import Stripe from 'stripe';
+
+// -----------------------------------------------------------------------------
+// CONFIG
+// -----------------------------------------------------------------------------
+const {
+  STRIPE_API_KEY,
+  STRIPE_WH_SECRET,
+  FORWARD_URL,          // es: https://tuo-backend-replit.app/webhook-stripe-inkcraft
+  PORT = 8080,
+  NODE_ENV = 'development'
+} = process.env;
+
+if (!STRIPE_API_KEY || !STRIPE_WH_SECRET || !FORWARD_URL) {
+  console.error('❌  Manca una variabile d’ambiente (STRIPE_API_KEY / STRIPE_WH_SECRET / FORWARD_URL).');
+  process.exit(1);
+}
+
+const stripe = new Stripe(STRIPE_API_KEY, { apiVersion: '2023-10-16' });
 const app = express();
 
-/* 1) ROUTE WEBHOOK ------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// 1) ROUTE WEBHOOK (Render) - verifica firma + forward JSON
+// -----------------------------------------------------------------------------
 app.post(
   '/webhook',
-  express.raw({ type: '*/*' }),         // riceviamo il buffer grezzo da Stripe
+  express.raw({ type: '*/*' }), // Importante per la firma
   async (req, res) => {
-
-    /* 1.a  Verifica firma ------------------------------------------------- */
-    const stripe = new Stripe(process.env.STRIPE_API_KEY, {
-      apiVersion: '2023-10-16',
-    });
     let event;
+
+    // 1.a Verifica firma
     try {
       event = stripe.webhooks.constructEvent(
         req.body,
         req.headers['stripe-signature'],
-        process.env.STRIPE_WH_SECRET
+        STRIPE_WH_SECRET
       );
     } catch (err) {
       console.error('❌  Firma non valida:', err.message);
       return res.status(400).send('Invalid signature');
     }
 
-    /* 1.b  Inoltra al backend (JSON) ------------------------------------- */
+    // 1.b Forward al backend Replit (JSON)
     try {
-      const resp = await fetch(process.env.FORWARD_URL, {
+      const resp = await fetch(FORWARD_URL, {
         method: 'POST',
-        body: JSON.stringify(event),      // ⬅️  JSON, non buffer
+        body: JSON.stringify(event),
         headers: {
           'Content-Type': 'application/json',
-          'X-From-Render': 'stripe-proxy'
-        }
+          'X-From-Render': 'stripe-proxy',
+        },
       });
-      console.log(`Forward OK (${resp.status})`);
+
+      const text = await resp.text(); // Leggiamo comunque, anche se JSON
+      console.log(`➡️  Forward → ${resp.status}`);
+      if (text) console.log(`   Body: ${text.slice(0, 500)}`);
+
     } catch (err) {
       console.error('⚠️  Forward error:', err.message);
+      // Non blocchiamo la risposta a Stripe: rispondiamo comunque 200,
+      // altrimenti Stripe ritenta in loop.
     }
 
+    // ACK a Stripe
     res.send('ok');
   }
-);                                        // **chiusura app.post**
-
-/* 2) AVVIO SERVER -------------------------------------------------------- */
-app.listen(process.env.PORT || 8080, () =>
-  console.log('🚀  Stripe proxy in ascolto')
 );
 
+// -----------------------------------------------------------------------------
+// 2) HEALTH CHECK
+// -----------------------------------------------------------------------------
+app.get('/', (_req, res) => res.send(`Stripe proxy ok - ${NODE_ENV}`));
+
+// -----------------------------------------------------------------------------
+// 3) START
+// -----------------------------------------------------------------------------
+app.listen(PORT, () => {
+  console.log(`🚀  Stripe proxy in ascolto sulla porta ${PORT}`);
+});
