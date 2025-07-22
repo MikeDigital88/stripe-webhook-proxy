@@ -1,22 +1,21 @@
 import express from 'express';
-import Stripe from 'stripe';
+import Stripe  from 'stripe';
 
 const app = express();
 
-// 1️⃣  usiamo raw Buffer per la firma
+/* 1) ROUTE WEBHOOK ------------------------------------------------------- */
 app.post(
   '/webhook',
-  express.raw({ type: '*/*' }),
-  async (req, res) => {                 // <‑‑ questa graffa apre il callback
-    const sig = req.headers['stripe-signature'];
+  express.raw({ type: '*/*' }),    // <-- raw body per la firma
+  async (req, res) => {            // <‑‑‑‑‑‑‑‑‑‑‑ APERTURA callback
 
-    // Init Stripe SDK
+    const sig    = req.headers['stripe-signature'];
     const stripe = new Stripe(process.env.STRIPE_API_KEY, {
       apiVersion: '2023-10-16',
     });
 
+    /* 1.a Verifica firma -------------------------------------------------- */
     let event;
-    // 2️⃣  Verifica firma
     try {
       event = stripe.webhooks.constructEvent(
         req.body,
@@ -25,29 +24,29 @@ app.post(
       );
     } catch (err) {
       console.error('❌  Firma non valida:', err.message);
-      return res.status(400).send('Invalid signature'); // <-- ora è legale
+      return res.status(400).send('Invalid signature');   // <‑‑‑‑ OK (dentro)
     }
 
-    // 3️⃣  Forward al backend Replit in vero JSON
+    /* 1.b Forward a Replit ------------------------------------------------ */
     try {
       await fetch(process.env.FORWARD_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-From-Render': 'stripe-proxy',
-          // se vuoi: 'Stripe-Signature': sig,
         },
-        body: JSON.stringify(event),          // inviamo l’evento serializzato
+        body: JSON.stringify(event),   // inviamo JSON valido
       });
     } catch (err) {
       console.error('⚠️  Forward error:', err.message);
-      // non blocchiamo Stripe: proseguiamo
+      /* NON rilanciamo: rispondiamo comunque 200 a Stripe */
     }
 
     res.send('ok');
-  }                                         // <‑‑ questa graffa CHIUDE il callback
+  }                                  // <‑‑‑‑‑‑‑‑‑‑‑ CHIUSURA callback
 );
 
+/* 2) AVVIO SERVER -------------------------------------------------------- */
 app.listen(process.env.PORT || 8080, () =>
   console.log('🚀  Stripe proxy in ascolto')
 );
