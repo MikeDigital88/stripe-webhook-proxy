@@ -1,5 +1,5 @@
 import express from 'express';
-import Stripe from 'stripe';
+import Stripe  from 'stripe';
 
 const app = express();
 
@@ -27,22 +27,27 @@ app.post(
       return res.status(400).send('Invalid signature');
     }
 
-    /* 1.b  Forward al backend (JSON) ------------------------------ */
-try {
-  const resp = await fetch(process.env.FORWARD_URL, {
-    method: 'POST',
-    body: JSON.stringify(event),          // ⬅️ inviamo JSON
-    headers: {
-      'Content-Type': 'application/json',
-      'X-From-Render': 'stripe-proxy'     // nessuna Stripe‑Signature
+    /* 1.b  Forward al backend (JSON) ------------------------------------- */
+    try {
+      const resp = await fetch(process.env.FORWARD_URL, {
+        method: 'POST',
+        body: JSON.stringify(event),    // ✅ inviamo JSON
+        headers: {
+          'Content-Type': 'application/json',
+          'X-From-Render': 'stripe-proxy'  // niente Stripe‑Signature
+        }
+      });
+      console.log(`Forward OK (${resp.status})`);
+    } catch (err) {
+      console.error('⚠️  Forward error:', err.message);
     }
-  });
-  console.log(`Forward OK (${resp.status})`);
-} catch (err) {
-  console.error('⚠️  Forward error:', err.message);
-}
+
+    res.send('ok');
+  }
+);           //  ← chiusura di app.post **IMPORTANTE**
 
 /* 2) AVVIO SERVER -------------------------------------------------------- */
 app.listen(process.env.PORT || 8080, () =>
   console.log('🚀  Stripe proxy in ascolto')
 );
+
