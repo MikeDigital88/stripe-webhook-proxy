@@ -1,12 +1,12 @@
 import express from 'express';
-import Stripe  from 'stripe';
+import Stripe from 'stripe';
 
 const app = express();
 
 /* 1) ROUTE WEBHOOK ------------------------------------------------------- */
 app.post(
   '/webhook',
-  express.raw({ type: '*/*' }),          // riceviamo il buffer da Stripe
+  express.raw({ type: '*/*' }),     // riceviamo il buffer grezzo da Stripe
   async (req, res) => {
 
     const sig    = req.headers['stripe-signature'];
@@ -18,7 +18,7 @@ app.post(
     let event;
     try {
       event = stripe.webhooks.constructEvent(
-        req.body,                       // buffer
+        req.body,                   // buffer
         sig,
         process.env.STRIPE_WH_SECRET
       );
@@ -27,21 +27,19 @@ app.post(
       return res.status(400).send('Invalid signature');
     }
 
-    /* 1.b  Forward al backend Replit (JSON) ------------------------------ */
+    /* 1.b  Forward al backend (JSON) ------------------------------------- */
     try {
       const resp = await fetch(process.env.FORWARD_URL, {
         method: 'POST',
-        body: JSON.stringify(event),    // *** JSON, non buffer ***
+        body: JSON.stringify(event),    // ✅  inviamo JSON
         headers: {
           'Content-Type': 'application/json',
           'X-From-Render': 'stripe-proxy'
-          // non più 'Stripe‑Signature'
         }
       });
       console.log(`Forward OK (${resp.status})`);
     } catch (err) {
       console.error('⚠️  Forward error:', err.message);
-      // non blocchiamo Stripe: rispondiamo comunque 200
     }
 
     res.send('ok');
@@ -52,5 +50,3 @@ app.post(
 app.listen(process.env.PORT || 8080, () =>
   console.log('🚀  Stripe proxy in ascolto')
 );
-
-
