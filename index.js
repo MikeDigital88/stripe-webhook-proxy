@@ -6,20 +6,18 @@ const app = express();
 /* 1) ROUTE WEBHOOK ------------------------------------------------------- */
 app.post(
   '/webhook',
-  express.raw({ type: '*/*' }),     // riceviamo il buffer grezzo da Stripe
+  express.raw({ type: '*/*' }),         // riceviamo il buffer grezzo da Stripe
   async (req, res) => {
 
-    const sig    = req.headers['stripe-signature'];
+    /* 1.a  Verifica firma ------------------------------------------------- */
     const stripe = new Stripe(process.env.STRIPE_API_KEY, {
       apiVersion: '2023-10-16',
     });
-
-    /* 1.a  Verifica firma ------------------------------------------------- */
     let event;
     try {
       event = stripe.webhooks.constructEvent(
-        req.body,                   // buffer
-        sig,
+        req.body,
+        req.headers['stripe-signature'],
         process.env.STRIPE_WH_SECRET
       );
     } catch (err) {
@@ -27,14 +25,14 @@ app.post(
       return res.status(400).send('Invalid signature');
     }
 
-    /* 1.b  Forward al backend (JSON) ------------------------------------- */
+    /* 1.b  Inoltra al backend (JSON) ------------------------------------- */
     try {
       const resp = await fetch(process.env.FORWARD_URL, {
         method: 'POST',
-        body: JSON.stringify(event),    // ✅ inviamo JSON
+        body: JSON.stringify(event),      // ⬅️  JSON, non buffer
         headers: {
           'Content-Type': 'application/json',
-          'X-From-Render': 'stripe-proxy'  // niente Stripe‑Signature
+          'X-From-Render': 'stripe-proxy'
         }
       });
       console.log(`Forward OK (${resp.status})`);
@@ -44,7 +42,7 @@ app.post(
 
     res.send('ok');
   }
-);           //  ← chiusura di app.post **IMPORTANTE**
+);                                        // **chiusura app.post**
 
 /* 2) AVVIO SERVER -------------------------------------------------------- */
 app.listen(process.env.PORT || 8080, () =>
