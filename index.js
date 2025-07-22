@@ -1,44 +1,29 @@
-import express from 'express';
-import Stripe from 'stripe';
+// Dopo la verifica firma OK
+let event;
+try {
+  event = stripe.webhooks.constructEvent(
+    req.body,
+    sig,
+    process.env.STRIPE_WH_SECRET
+  );
+} catch (err) {
+  console.error('❌  Firma non valida:', err.message);
+  return res.status(400).send('Invalid signature');
+}
 
-const app = express();
-
-// Raw body per la verifica della firma
-app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const stripe = new Stripe(process.env.STRIPE_API_KEY, {
-    apiVersion: '2023-10-16',
+// Forward al backend Replit – adesso in vero JSON
+try {
+  await fetch(process.env.FORWARD_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-From-Render': 'stripe-proxy'
+      // se vuoi puoi aggiungere 'Stripe-Signature': sig
+    },
+    body: JSON.stringify(event),
   });
+} catch (err) {
+  console.error('⚠️  Forward error:', err.message);
+}
 
-  try {
-    stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WH_SECRET
-    );
-  } catch (err) {
-    console.error('❌  Firma non valida:', err.message);
-    return res.status(400).send('Invalid signature');
-  }
-
-  // Forward al backend Replit
-  try {
-    await fetch(process.env.FORWARD_URL, {
-      method: 'POST',
-      body: req.body,
-      headers: {
-        'Content-Type': 'application/json',
-        'Stripe-Signature': sig,
-        'X-From-Render': 'stripe-proxy',
-      },
-    });
-  } catch (err) {
-    console.error('⚠️  Forward error:', err.message);
-  }
-
-  res.send('ok');
-});
-
-app.listen(process.env.PORT || 8080, () =>
-  console.log('🚀  Stripe proxy in ascolto')
-);
+res.send('ok');
