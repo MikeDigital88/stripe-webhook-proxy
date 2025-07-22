@@ -1,0 +1,12 @@
+{
+  "name": "stripe-webhook-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "stripe": "^13.14.0"
+  }
+}
