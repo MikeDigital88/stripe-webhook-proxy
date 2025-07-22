@@ -23,7 +23,7 @@ app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
 
   // Forward al backend Replit
   try {
-    await fetch('https://inkcraftai.repl.co/api/payment/events', {
+    await fetch(process.env.FORWARD_URL, {
       method: 'POST',
       body: req.body,
       headers: {
