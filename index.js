@@ -1,27 +1,19 @@
-// index.js - Proxy Stripe → Replit (senza verifica firma, con wrapper)
-
+// index.js - Render
 import dns from 'dns';
 dns.setDefaultResultOrder('ipv4first');
 
 import express from 'express';
 
 const { FORWARD_URL, PORT = 8080, NODE_ENV = 'development' } = process.env;
-
-if (!FORWARD_URL) {
-  console.error('❌ FORWARD_URL mancante');
-  process.exit(1);
-}
+if (!FORWARD_URL) { console.error('❌ FORWARD_URL mancante'); process.exit(1); }
 console.log('FORWARD_URL =', FORWARD_URL);
 
 const app = express();
 
 app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
   let stripeEvent = null;
-  try {
-    stripeEvent = JSON.parse(req.body.toString('utf8'));
-  } catch (e) {
-    console.error('⚠️ JSON parse (raw body) fallita:', e.message);
-  }
+  try { stripeEvent = JSON.parse(req.body.toString('utf8')); }
+  catch (e) { console.error('⚠️ JSON parse fallback:', e.message); }
 
   try {
     const resp = await fetch(FORWARD_URL, {
@@ -45,5 +37,5 @@ app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
 });
 
 app.get('/', (_req, res) => res.send(`Proxy OK - ${NODE_ENV}`));
-
 app.listen(PORT, () => console.log('🚀 Proxy listening on', PORT));
+
