@@ -1,8 +1,7 @@
-// index.js – Proxy Stripe → Replit (niente firma, wrapper raw)
+// index.js – Proxy Stripe → Replit (senza verifica firma, invia RAW nel wrapper)
 
-/* 1 – Forza IPv4 (Render a volte preferisce AAAA) */
 import dns from 'dns';
-dns.setDefaultResultOrder('ipv4first');
+dns.setDefaultResultOrder('ipv4first');            // evita problemi IPv6 su Render
 
 import express from 'express';
 
@@ -15,10 +14,10 @@ console.log('FORWARD_URL =', FORWARD_URL);
 
 const app = express();
 
-/* 2 – Webhook: ricevi RAW e inoltra “as is” */
+/* 1) Webhook – ricevi RAW da Stripe e inoltra “così com’è”  */
 app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
-  // buffer → stringa (niente JSON.parse qui!)
-  const raw = req.body.toString('utf8');
+  // buffer  → stringa  (⚠️ NON fare JSON.parse qui!)
+  const rawBody = req.body.toString('utf8');
 
   try {
     const resp = await fetch(FORWARD_URL, {
@@ -29,22 +28,21 @@ app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
         'Stripe-Signature': req.headers['stripe-signature'] || ''
       },
       // wrapper: { "__stripe_raw": "<stringa raw>" }
-      body: JSON.stringify({ __stripe_raw: raw })
+      body: JSON.stringify({ __stripe_raw: rawBody })
     });
 
     const txt = await resp.text();
-    console.log(`➡️ Forward → ${resp.status}`);
+    console.log(`➡️ Forward → ${resp.status}`);
     if (txt) console.log(`   Body: ${txt.slice(0, 400)}`);
   } catch (err) {
     console.error('⚠️  Forward error:', err.name, err.code, err.message);
+    // non bloccare Stripe: rispondi comunque 200
   }
 
-  // Stripe deve SEMPRE ricevere 200
-  res.send('ok');
+  res.send('ok');                                  // sempre 200 a Stripe
 });
 
-/* Health‑check semplice */
-app.get('/', (_req, res) => res.send(`Proxy OK – ${NODE_ENV}`));
+/* 2) Health‑check semplice */
+app.get('/', (_req, res) => res.send(`Proxy OK – ${NODE_ENV}`));
 
 app.listen(PORT, () => console.log('🚀  Proxy listening on', PORT));
-
